@@ -14,15 +14,13 @@
 1. **Preparar o ambiente no Databricks Community Edition:**
 
 - Criar cluster com runtime que suporte PySpark e Python 3.x. O utilizado foi com a seguinte configuração:
-```
-**Databricks Runtime Version**
-14.3 LTS (includes Apache Spark 3.5.0, Scala 2.12)
-**Driver Typer**
-Community Optimized 15.3 GB Memory, 2 Cores
+```yaml
+Databricks Runtime Version: 14.3 LTS (includes Apache Spark 3.5.0, Scala 2.12)
+Driver Type: Community Optimized 15.3 GB Memory, 2 Cores
 ```
 
 - Fazer upload dos arquivos no Workspace seguindo a seguinte estrutura:
-```
+```csharp
 ifood-case/
 ├── data/ # Datasets
 │ ├── raw/ # Dados originais
@@ -36,13 +34,12 @@ ifood-case/
 └── requirements.txt 
 ``` 
 
-- Fazer upload dos dados disponíveis no diretório `data/raw/" para `FileStore/tables/` de forma manual:
-> 1) Abra um notebook
-> 2) Clique em `File`
-> 3) Clique em `Upload data to DBFS...`
-> 4) Faça o upload dos dados `.json`
+- Fazer upload dos dados `.json` disponíveis no diretório `data/raw/` para `FileStore/tables/` de forma manual:
+> 1) Abra um notebook no Databrick
+> 2) Clique em **File > Upload data to DBFS...**
+> 4) Selecione os arquivos e aguarde o upload
 
-- Instalar pacotes Python listados no `requirements.txt` via notebook (célula mágica):
+- No Databricks Community não foi necessário instalar pacotes Python, mas caso utilize fora desse ambiente importe os listados no `requirements.txt` via notebook (célula mágica):
 
 ```python
 %pip install -r requirements.txt
