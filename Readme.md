@@ -45,9 +45,12 @@ ifood-case/
 %pip install -r requirements.txt
 ```
 
+> Se for executar os notebooks fora do ambiente Databricks, é recomendado ler as células que possuem indicações de ajustes de caminhos
+
 2. **Executar notebook de processamento:**
 
 - Rodar `1_data_processing.ipynb` para gerar dataset processado em `dbfs:/FileStore/tables/final_dataset.parquet`.
+
 
 3. **Executar notebook de modelagem:**
 
