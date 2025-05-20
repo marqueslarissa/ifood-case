@@ -13,8 +13,9 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
-from pyspark.ml.feature import VectorAssembler, MinMaxScaler
+from pyspark.ml.feature import VectorAssembler, MinMaxScaler, StringIndexer, OneHotEncoder
 from pyspark.sql.window import Window
+from pyspark.ml import Pipeline
 
 user = spark.sql("SELECT current_user()").collect()[0][0]
 
@@ -34,19 +35,19 @@ transactions_raw = spark.read.json("/FileStore/tables/transactions.json")
 
 # COMMAND ----------
 
-# Explorar e entender os dados
-print('--- Ofertas ---')
-offers_raw.printSchema()
-offers_raw.show(5)
-
-print('--- Clientes ---')
-customers_raw.printSchema()
-customers_raw.show(5)
-
-print('--- Eventos ---')
-transactions_raw.printSchema()
-transactions_raw.show(5)
-
+## Explorar e entender os dados
+#print('--- Ofertas ---')
+#offers_raw.printSchema()
+#offers_raw.show(5)
+#
+#print('--- Clientes ---')
+#customers_raw.printSchema()
+#customers_raw.show(5)
+#
+#print('--- Eventos ---')
+#transactions_raw.printSchema()
+#transactions_raw.show(5)
+#
 
 # COMMAND ----------
 
@@ -92,32 +93,32 @@ transactions = transactions_raw \
 # COMMAND ----------
 
 
-print('--- Ofertas ---')
-print(' -- Describe')
-offers.select('discount_value','duration','min_value').describe().show() 
-print(' -- Analise de Missings')
-offers.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in offers.columns]).show()
-print(' -- Distribuicao: Canal x Tipo de Oferta')
-offers.groupBy('channel','offer_type').count().orderBy('channel', ascending=False).show()
-
-print('--- Clientes ---')
-print(' -- Describe')
-customers.select('age','credit_card_limit','registered_on').describe().show() 
-print(' -- Analise de Missings')
-customers.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in customers.columns]).show()
-print(' -- Distribuicao: Idade e Genero')
-customers.groupBy('age').count().show()
-customers.groupBy('gender').count().show()
-
-print('--- Eventos ---')
-print(' -- Describe')
-transactions.select('time_since_test_start','amount','reward').describe().show() 
-print(' -- Analise de Missings')
-transactions.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in transactions.columns]).show()
-print(' -- Distribuicao: Evento x Atributos da Coluna Value')
-transactions.groupBy('event').agg({"offer_id2":"count"
-                                   ,"reward":"count"
-                                   ,"amount":"count"}).show()
+#print('--- Ofertas ---')
+#print(' -- Describe')
+#offers.select('discount_value','duration','min_value').describe().show() 
+#print(' -- Analise de Missings')
+#offers.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in offers.columns]).show()
+#print(' -- Distribuicao: Canal x Tipo de Oferta')
+#offers.groupBy('channel','offer_type').count().orderBy('channel', ascending=False).show()
+#
+#print('--- Clientes ---')
+#print(' -- Describe')
+#customers.select('age','credit_card_limit','registered_on').describe().show() 
+#print(' -- Analise de Missings')
+#customers.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in customers.columns]).show()
+#print(' -- Distribuicao: Idade e Genero')
+#customers.groupBy('age').count().show()
+#customers.groupBy('gender').count().show()
+#
+#print('--- Eventos ---')
+#print(' -- Describe')
+#transactions.select('time_since_test_start','amount','reward').describe().show() 
+#print(' -- Analise de Missings')
+#transactions.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in transactions.columns]).show()
+#print(' -- Distribuicao: Evento x Atributos da Coluna Value')
+#transactions.groupBy('event').agg({"offer_id2":"count"
+#                                   ,"reward":"count"
+#                                   ,"amount":"count"}).show()
 
 # COMMAND ----------
 
@@ -143,14 +144,14 @@ customers_imputed = KNNImputer(customers, target_cols, features_ref, k=5)
 
 # COMMAND ----------
 
-print('--- Clientes Apos Imput---')
-print(' -- Describe')
-customers_imputed.select('age','credit_card_limit','registered_on').describe().show() 
-print(' -- Analise de Missings')
-customers_imputed.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in customers_imputed.columns]).show()
-print(' -- Distribuicao: Idade e Genero')
-customers_imputed.groupBy('age').count().show()
-customers_imputed.groupBy('gender').count().show()
+#print('--- Clientes Apos Imput---')
+#print(' -- Describe')
+#customers_imputed.select('age','credit_card_limit','registered_on').describe().show() 
+#print(' -- Analise de Missings')
+#customers_imputed.select([count(when(isnan(c) | col(c).isNull(), c)).alias(c) for c in customers_imputed.columns]).show()
+#print(' -- Distribuicao: Idade e Genero')
+#customers_imputed.groupBy('age').count().show()
+#customers_imputed.groupBy('gender').count().show()
 
 # COMMAND ----------
 
@@ -207,7 +208,14 @@ transactions_final = transactions.join(
     offers_stats,
     on=["account_id"],
     how="outer"
-) 
+).withColumn(
+    "perc_offers_used",
+    coalesce(col("perc_offers_used"), lit(0))
+)
+
+transactions_final = transactions_final.withColumn("offer_received_temp", when(col("event") == "offer received", 1).otherwise(0)) \
+    .withColumn("received_offer_flag", max("offer_received_temp").over(Window.partitionBy("account_id"))) \
+    .drop("offer_received_temp")
 
 # COMMAND ----------
 
@@ -356,7 +364,7 @@ transactions_final = transactions_final.withColumn(
 .orderBy("account_id", "time_since_test_start", "event_order")\
 .drop("event_order")
 
-transactions_final.show(50)
+#transactions_final.show(50)
 
 # COMMAND ----------
 
@@ -365,8 +373,9 @@ df_final = customers_imputed.join(transactions_final, customers_imputed.id == tr
     .drop("id") \
     .join(offers, offers.id == transactions_final.offer_id2, "left") 
 
-df_final = df_final.withColumn(
+df_f.];;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;~2inal = df_final.withColumn(-9666]
     "event_order",
+
     when(col("event") == "offer received", 1)
     .when(col("event") == "offer viewed", 2)
     .when(col("event") == "offer completed", 3)
@@ -376,8 +385,54 @@ df_final = df_final.withColumn(
 .orderBy("account_id", "time_since_test_start", "event_order")\
 .drop("event_order")
 
-df_final.show(100)
-#df_final = df_final.fillna({"qtd_transacoes_30d": 0})
+#df_final.show(50)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 7. Encoding de variáveis categóricas utilizando OneHotEncoder filtrando somente os eventos de ofertas, dados que irão no modelo
+# MAGIC * `gender`
+# MAGIC * `offer_type`
+# MAGIC * `channel`
+
+# COMMAND ----------
+
+df_filled = df_final.filter(col("event") == "offer received")
+
+# COMMAND ----------
+
+# Lista de colunas categoricas para aplicar OHE
+categorical_cols = ['gender', 'offer_type', 'channel']
+
+# Gerar nomes para colunas indexadas e codificadas
+indexers = [StringIndexer(inputCol=col, outputCol=col + "_idx", handleInvalid="keep") for col in categorical_cols]
+encoders = [OneHotEncoder(inputCol=col + "_idx", outputCol=col + "_ohe") for col in categorical_cols]
+
+# Construir pipeline de transformacao
+ohe_pipeline = Pipeline(stages=indexers + encoders)
+
+# Aplicar pipeline no DataFrame
+ohe_model = ohe_pipeline.fit(df_filled)
+df_encoded = ohe_model.transform(df_filled)
+
+# Explodir cada vetor OHE em colunas individuais
+for col_name in categorical_cols:
+    # Converter vetor para array
+    df_encoded = df_encoded.withColumn(f"{col_name}_ohe_array", vector_to_array(f"{col_name}_ohe"))
+
+    # Descobrir número de colunas para cada vetor (usando o metadado do modelo)
+    #ohe_size = ohe_model.stages[-len(categorical_cols) + categorical_cols.index(col_name)].getOutputCols()[0]
+    num_categories = df_encoded.select(f"{col_name}_ohe_array").head()[f"{col_name}_ohe_array"].__len__()
+
+    # Criar novas colunas com base no vetor
+    for i in range(num_categories):
+        df_encoded = df_encoded.withColumn(f"{col_name}_ohe_{i}", col(f"{col_name}_ohe_array")[i])
+
+# 5. Remover colunas auxiliares
+drop_cols = [f"{col}_idx" for col in categorical_cols] + [f"{col}_ohe" for col in categorical_cols] + [f"{col}_ohe_array" for col in categorical_cols]
+df_encoded = df_encoded.drop(*drop_cols)
+
+#.show(50, truncate=False)
 
 # COMMAND ----------
 
@@ -387,10 +442,9 @@ df_final.show(100)
 # COMMAND ----------
 
 # Salvar dataset processado em parquet
-df_final.write.mode("overwrite").parquet("dbfs:/FileStore/tables/final_dataset.parquet")
+#df_final.write.mode("overwrite").parquet("FileStore/tables/final_dataset.parquet")
+
+# Salvar dataset final para a modelagem em parquet
+df_encoded.write.mode("overwrite").parquet("FileStore/tables/final_dataset.parquet")
 
 print("Pipeline de processamento completo. Dataset salvo em final_dataset.parquet")
-
-# COMMAND ----------
-
-df_final.coalesce(1).write.mode("overwrite").parquet("/dbfs:/FileStore/final_dataset_single.parquet")
